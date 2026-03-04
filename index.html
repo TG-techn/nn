@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ricky Brut (BRUT) DApp</title>
+    <!-- Gunakan Library Ethers.js Versi 5.7 (Paling Stabil) -->
+    <script src="https://cdn.ethers.io" type="application/javascript"></script>
+    <style>
+        :root { --primary: #f3ba2f; --bg: #0d0d0d; --card: #1a1a1a; --text: #ffffff; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; overflow-x: hidden; }
+        .container { width: 100%; max-width: 500px; margin: auto; padding: 20px; box-sizing: border-box; padding-bottom: 100px; }
+        .header { text-align: center; padding: 20px 0; border-bottom: 1px solid #333; }
+        .card { background: var(--card); border-radius: 15px; padding: 20px; margin-top: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); text-align: center; }
+        button { background: var(--primary); border: none; padding: 12px; border-radius: 10px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 8px; transition: 0.3s; color: black; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        input { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: 1px solid #333; background: #222; color: white; box-sizing: border-box; }
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; max-width: 500px; background: #1a1a1a; display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #333; z-index: 100; left: 50%; transform: translateX(-50%); }
+        .nav-item { color: #888; font-size: 11px; cursor: pointer; text-align: center; flex: 1; }
+        .nav-item.active { color: var(--primary); }
+        .hidden { display: none; }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .stat-box { background: #252525; padding: 10px; border-radius: 8px; font-size: 11px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0; color:var(--primary)">Ricky Brut (BRUT)</h2>
+            <p id="addrDisp" style="font-size: 10px; color: #888; word-break: break-all; margin-top: 10px;">Dompet Belum Terhubung</p>
+            <button id="connectBtn">HUBUNGKAN METAMASK</button>
+        </div>
+
+        <!-- TAB BERANDA -->
+        <div id="tab-beranda" class="content">
+            <div class="card">
+                <h3>Token Ecosystem</h3>
+                <p style="font-size: 14px; color: #ccc;">Selamat datang di ekosistem Ricky Brut (BRUT) di jaringan BSC.</p>
+                <button onclick="addToken()">+ Tambahkan BRUT ke Metamask</button>
+            </div>
+        </div>
+
+        <!-- TAB MINING -->
+        <div id="tab-penambangan" class="content hidden">
+            <div class="card">
+                <h3>⛏️ Mining Center</h3>
+                <input type="text" id="refAddr" placeholder="Alamat Referrer (Opsional)">
+                <button onclick="mine()" id="btnMine" style="height: 80px; font-size: 18px;">MULAI MENAMBANG</button>
+                <p style="font-size: 11px; color: #888; margin-top:10px;">Pastikan saldo BNB cukup untuk biaya gas.</p>
+            </div>
+        </div>
+
+        <!-- TAB STAKING -->
+        <div id="tab-staking" class="content hidden">
+            <div class="card">
+                <h3>🏦 Staking Vault</h3>
+                <div class="stat-grid">
+                    <div class="stat-box">Staked:<br><span id="stakedBal">0</span> BRUT</div>
+                    <div class="stat-box">Rewards:<br><span id="rewardBal">0</span> BRUT</div>
+                </div>
+                <input type="number" id="stakeAmt" placeholder="Jumlah BRUT untuk Stake">
+                <button onclick="approveSTK()" style="background: #444; color:white">1. Approve BRUT</button>
+                <button onclick="stake()">2. Deposit Stake</button>
+                <div style="display: flex; gap: 5px;">
+                    <button onclick="claim()" style="background: #28a745; color:white; font-size: 12px;">Claim Reward</button>
+                    <button onclick="withdraw()" style="background: #dc3545; color:white; font-size: 12px;">Withdraw All</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB INFO -->
+        <div id="tab-info" class="content hidden">
+            <div class="card">
+                <h3>📊 Info Token</h3>
+                <div style="text-align: left; font-size: 13px;">
+                    <p>Total Supply: <span id="ts" style="color:var(--primary)">...</span></p>
+                    <p>Max Supply: 21.000.000 BRUT</p>
+                    <p>Next Halving: <span id="nh">...</span></p>
+                    <p>Referral Saya: <span id="myRef">0</span> Orang</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigasi Bawah -->
+    <div class="bottom-nav">
+        <div class="nav-item active" id="nav-beranda" onclick="showTab('beranda')">🏠<br>Beranda</div>
+        <div class="nav-item" id="nav-penambangan" onclick="showTab('penambangan')">⛏️<br>Mining</div>
+        <div class="nav-item" id="nav-staking" id="nav-staking" onclick="showTab('staking')">🏦<br>Staking</div>
+        <div class="nav-item" id="nav-info" onclick="showTab('info')">ℹ️<br>Info</div>
+    </div>
+
+    <script>
+        const CA = "0x13597c6F66819a9daAB2Bab97037ea5E5605561D";
+        const ABI = [{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"allowance","type":"uint256"},{"internalType":"uint256","name":"needed","type":"uint256"}],"name":"ERC20InsufficientAllowance","type":"error"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"uint256","name":"balance","type":"uint256"},{"internalType":"uint256","name":"needed","type":"uint256"}],"name":"ERC20InsufficientBalance","type":"error"},{"inputs":[{"internalType":"address","name":"approver","type":"address"}],"name":"ERC20InvalidApprover","type":"error"},{"inputs":[{"internalType":"address","name":"receiver","type":"address"}],"name":"ERC20InvalidReceiver","type":"error"},{"inputs":[{"internalType":"address","name":"sender","type":"address"}],"name":"ERC20InvalidSender","type":"error"},{"inputs":[{"internalType":"address","name":"spender","type":"address"}],"name":"ERC20InvalidSpender","type":"error"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[],"name":"MAX_SUPPLY","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MINING_COOLDOWN","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"REFERRAL_BONUS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"value","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"burnFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"calculateReward","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"claimStakeReward","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getLogoURI","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"pure","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"lastMined","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lockOwnerTokensForOneYear","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"lockUntil","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"metadata","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"_referrer","type":"address"}],"name":"mine","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"miningReward","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"nextHalvingSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"referralCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"newURI","type":"string"}],"name":"setMetadataURI","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"stake","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"stakeTimestamp","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"stakedAmount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"withdrawStake","outputs":[],"stateMutability":"nonpayable","type":"function"}];
+
+        let provider, signer, contract;
+
+        // FUNGSI CONNECT WALLET YANG DIPERBAIKI
+        async function connect() {
+            if (window.ethereum) {
+                try {
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+                    signer = provider.getSigner();
+                    contract = new ethers.Contract(CA, ABI, signer);
+                    
+                    const userAddr = accounts[0];
+                    document.getElementById('addrDisp').innerText = "Connected: " + userAddr.substring(0,6) + "..." + userAddr.substring(38);
+                    document.getElementById('connectBtn').innerText = "DOMPET TERHUBUNG";
+                    document.getElementById('connectBtn').disabled = true;
+                    
+                    loadData(userAddr);
+                } catch (err) {
+                    console.error("Gagal konek:", err);
+                    alert("Gagal menghubungkan dompet.");
+                }
+            } else {
+                alert("Metamask tidak terdeteksi. Silakan gunakan browser Metamask.");
+            }
+        }
+
+        async function loadData(addr) {
+            try {
+                const ts = await contract.totalSupply();
+                const nh = await contract.nextHalvingSupply();
+                const stk = await contract.stakedAmount(addr);
+                const rwd = await contract.calculateReward(addr);
+                const rcount = await contract.referralCount(addr);
+                
+                document.getElementById('ts').innerText = ethers.utils.formatUnits(ts, 18) + " BRUT";
+                document.getElementById('nh').innerText = ethers.utils.formatUnits(nh, 18) + " BRUT";
+                document.getElementById('stakedBal').innerText = ethers.utils.formatUnits(stk, 18);
+                document.getElementById('rewardBal').innerText = ethers.utils.formatUnits(rwd, 18);
+                document.getElementById('myRef').innerText = rcount.toString();
+            } catch (e) { console.log("Load data error:", e); }
+        }
+
+        // FUNGSI TRANSAKSI
+        async function mine() {
+            if(!contract) return alert("Konek dompet dulu!");
+            try {
+                let ref = document.getElementById('refAddr').value || "0x0000000000000000000000000000000000000000";
+                const tx = await contract.mine(ref);
+                await tx.wait();
+                alert("Sukses Menambang!");
+                location.reload();
+            } catch (e) { alert("Error: Sedang cooldown atau saldo gas tidak cukup."); }
+        }
+
+        async function approveSTK() {
+            if(!contract) return alert("Konek dompet dulu!");
+            try {
+                const val = document.getElementById('stakeAmt').value;
+                const amt = ethers.utils.parseUnits(val, 18);
+                const tx = await contract.approve(CA, amt);
+                await tx.wait(); alert("Approve Berhasil!");
+            } catch (e) { alert("Gagal Approve."); }
+        }
+
+        async function stake() {
+            if(!contract) return alert("Konek dompet dulu!");
+            try {
+                const val = document.getElementById('stakeAmt').value;
+                const amt = ethers.utils.parseUnits(val, 18);
+                const tx = await contract.stake(amt);
+                await tx.wait(); alert("Berhasil Stake!");
+                location.reload();
+            } catch (e) { alert("Gagal Stake. Pastikan sudah Approve."); }
+        }
+
+        async function claim() { 
+            if(!contract) return;
+            try { await (await contract.claimStakeReward()).wait(); alert("Reward Diambil!"); location.reload(); } catch(e){ alert("Gagal Claim."); }
+        }
+
+        async function withdraw() { 
+            if(!contract) return;
+            try { await (await contract.withdrawStake()).wait(); alert("Berhasil Tarik Semua!"); location.reload(); } catch(e){ alert("Gagal Withdraw."); }
+        }
+
+        async function addToken() {
+            await window.ethereum.request({
+                method: 'wallet_watchAsset',
+                params: { type: 'ERC20', options: { address: CA, symbol: 'BRUT', decimals: 18, image: '' } }
+            });
+        }
+
+        // FUNGSI NAVIGASI TAB
+        function showTab(id) {
+            document.querySelectorAll('.content').forEach(e => e.classList.add('hidden'));
+            document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+            
+            document.getElementById('tab-' + id).classList.remove('hidden');
+            document.getElementById('nav-' + id).classList.add('active');
+        }
+
+        document.getElementById('connectBtn').onclick = connect;
+    </script>
+</body>
+</html>
